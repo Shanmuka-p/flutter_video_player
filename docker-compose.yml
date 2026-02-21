@@ -1,15 +1,13 @@
-version: '3.8'
-
 services:
   flutter_build:
     # 1. Build the image using the Dockerfile we just created
     build:
       context: .
       dockerfile: Dockerfile
-    
+
     # 2. Map the current folder to the /app folder in the container
     volumes:
       - .:/app
-    
+
     # 3. The actual command to build the APK
     command: flutter build apk --release
