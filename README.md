@@ -22,7 +22,7 @@ A modern, production-ready Flutter video streaming application that correctly im
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
+   git clone <https://github.com/Shanmuka-p/flutter_video_player.git>
    cd flutter_video_player
    ```
 2. **Environment Variables:**
