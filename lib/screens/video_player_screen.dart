@@ -12,7 +12,7 @@ class VideoPlayerScreen extends StatefulWidget {
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-// Added WidgetsBindingObserver to detect when app goes to background
+// WidgetsBindingObserver detects when the app goes to the background
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindingObserver {
   final DataService _dataService = DataService();
   VideoMetadata? _metadata;
@@ -21,24 +21,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Platform channel matching Requirement 5
   static const platform = MethodChannel('com.fluttercast.pip/controller');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // Start listening to app lifecycle
+    WidgetsBinding.instance.addObserver(this); 
     _initializeDataAndPlayer();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Stop listening
-    _savePlaybackPosition(); // Save before closing
+    WidgetsBinding.instance.removeObserver(this); 
+    _savePlaybackPosition(); 
     _controller?.dispose();
     super.dispose();
   }
 
-  // Detects when the app goes to background or PiP mode (Requirement 9)
+  // Detects app lifecycle changes for Requirement 9 (Persistence)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
@@ -53,23 +54,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
     });
 
     try {
-      // 1. Fetch Metadata
       final data = await _dataService.fetchVideoMetadata();
       
-      // 2. Initialize Video Player
       _controller = VideoPlayerController.networkUrl(Uri.parse(data.videoUrl));
       await _controller!.initialize();
       
-      // 3. Load Saved Position (Requirement 9)
+      // Load Saved Position
       final prefs = await SharedPreferences.getInstance();
       final savedSeconds = prefs.getInt('last_playback_position_seconds') ?? 0;
       if (savedSeconds > 0) {
         await _controller!.seekTo(Duration(seconds: savedSeconds));
       }
 
-      // 4. Listen for video progress to update the UI
       _controller!.addListener(() {
-        setState(() {}); // Rebuilds to update progress bar
+        setState(() {}); 
       });
 
       setState(() {
@@ -85,7 +83,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
     }
   }
 
-  // Save Position Logic (Requirement 9)
+  // Save Position Logic
   Future<void> _savePlaybackPosition() async {
     if (_controller != null && _controller!.value.isInitialized) {
       final prefs = await SharedPreferences.getInstance();
@@ -98,7 +96,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
     if (_controller != null) {
       if (_controller!.value.isPlaying) {
         _controller!.pause();
-        _savePlaybackPosition(); // Save position when paused
+        _savePlaybackPosition();
       } else {
         _controller!.play();
       }
@@ -108,7 +106,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
 
   Future<void> _enablePiP() async {
     try {
-      _savePlaybackPosition(); // Save before entering PiP
+      _savePlaybackPosition(); 
       await platform.invokeMethod('enablePictureInPicture');
     } on PlatformException catch (e) {
       print("Failed to enable PiP: '${e.message}'.");
@@ -117,42 +115,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
+    // Check if the screen height is small (indicates PiP mode)
+    final isPipMode = MediaQuery.of(context).size.height < 400;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Flutter PiP Player')),
-      body: _buildBody(),
+      // Hide AppBar when in PiP mode to save space
+      appBar: isPipMode ? null : AppBar(title: const Text('Flutter PiP Player')),
+      
+      // SingleChildScrollView prevents overflow errors during resize
+      body: SingleChildScrollView(
+        child: _buildBody(isPipMode),
+      ),
     );
   }
 
-  Widget _buildBody() {
-    // 1. Loading State
+  Widget _buildBody(bool isPipMode) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 300, 
+        child: Center(child: CircularProgressIndicator())
+      );
     }
 
-    // 2. Error State
     if (_errorMessage != null) {
-      return Center(
-        child: Container(
-          key: const Key('error-message-container'),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Error: $_errorMessage', textAlign: TextAlign.center),
-              const SizedBox(height: 10),
-              ElevatedButton(
-                key: const Key('retry-button'),
-                onPressed: _initializeDataAndPlayer,
-                child: const Text('Retry'),
-              ),
-            ],
+      return SizedBox(
+        height: 300,
+        child: Center(
+          child: Container(
+            key: const Key('error-message-container'),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Error: $_errorMessage', textAlign: TextAlign.center),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  key: const Key('retry-button'),
+                  onPressed: _initializeDataAndPlayer,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
-    // 3. Success State
     final isPlaying = _controller?.value.isPlaying ?? false;
     final position = _controller?.value.position.inMilliseconds.toDouble() ?? 0.0;
     final duration = _controller?.value.duration.inMilliseconds.toDouble() ?? 1.0;
@@ -161,16 +170,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            _metadata!.videoTitle,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+        // Only show Title if NOT in PiP mode
+        if (!isPipMode)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              _metadata!.videoTitle,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
         
-        // Video Container
+        // Video Container ALWAYS shows
         Container(
           key: const Key('video-player-container'),
           color: Colors.black,
@@ -184,36 +195,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
                   child: Center(child: CircularProgressIndicator()),
                 ),
         ),
-        const SizedBox(height: 20),
         
-        // Progress Bar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: LinearProgressIndicator(
-            key: const Key('video-progress-bar'),
-            value: progress,
+        // Only show Progress Bar and Controls if NOT in PiP mode
+        if (!isPipMode) ...[
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: LinearProgressIndicator(
+              key: const Key('video-progress-bar'),
+              value: progress,
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        
-        // Controls Row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              key: const Key('play-pause-button'),
-              onPressed: _togglePlayPause,
-              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-              iconSize: 32,
-            ),
-            IconButton(
-              key: const Key('pip-mode-button'),
-              onPressed: _enablePiP,
-              icon: const Icon(Icons.picture_in_picture_alt),
-              iconSize: 32,
-            ),
-          ],
-        ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                key: const Key('play-pause-button'),
+                onPressed: _togglePlayPause,
+                icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                iconSize: 32,
+              ),
+              IconButton(
+                key: const Key('pip-mode-button'),
+                onPressed: _enablePiP,
+                icon: const Icon(Icons.picture_in_picture_alt),
+                iconSize: 32,
+              ),
+            ],
+          ),
+        ]
       ],
     );
   }
